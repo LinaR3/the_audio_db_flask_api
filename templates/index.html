@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AudioDB V1 (Comparación)</title>
+    <!-- Incluye Tailwind para estilos -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Estilos básicos para las tarjetas */
+        .card-album {
+            transition: transform 0.3s;
+        }
+        .card-album:hover {
+            transform: translateY(-5px);
+        }
+    </style>
+</head>
+<body class="bg-gray-800 text-white min-h-screen p-8">
+    
+    <div class="max-w-6xl mx-auto">
+        
+        <h1 class="text-4xl font-bold text-teal-400 mb-8 text-center">
+            Mi Explorador AudioDB (Comparación)
+        </h1>
+        
+        <!-- Contenedor del Carrusel (Home) -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-semibold mb-4 border-b border-gray-600 pb-2">
+                Álbumes Populares (Home)
+            </h2>
+            <div id="trendingCarousel" class="flex space-x-4 overflow-x-scroll pb-4">
+                <div class="text-gray-400">Cargando contenido del API...</div>
+            </div>
+        </section>
+
+        <!-- Sección de Búsqueda y Filtros -->
+        <section class="bg-gray-700 p-6 rounded-lg shadow-xl">
+            <h2 class="text-2xl font-semibold mb-4 text-orange-400">
+                Filtros de Búsqueda
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <!-- Filtro: Artista (Búsqueda Principal) -->
+                <div>
+                    <label class="block mb-1 text-sm text-gray-300">Artista (Obligatorio)</label>
+                    <input type="text" id="inputArtist" placeholder="Ej: Daft Punk" 
+                           class="w-full p-2 rounded bg-gray-600 border border-gray-500 text-white">
+                </div>
+                <!-- Filtro: Año -->
+                <div>
+                    <label class="block mb-1 text-sm text-gray-300">Año</label>
+                    <input type="text" id="inputYear" placeholder="Ej: 2001" 
+                           class="w-full p-2 rounded bg-gray-600 border border-gray-500 text-white">
+                </div>
+                <!-- Filtro: Nombre de Álbum -->
+                <div>
+                    <label class="block mb-1 text-sm text-gray-300">Nombre de Álbum</label>
+                    <input type="text" id="inputAlbumName" placeholder="Ej: Discovery" 
+                           class="w-full p-2 rounded bg-gray-600 border border-gray-500 text-white">
+                </div>
+            </div>
+
+            <button onclick="buscarDatos()"
+                    class="mt-4 px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg font-bold shadow-md">
+                Buscar y Filtrar
+            </button>
+        </section>
+
+        <!-- Contenedor de Resultados -->
+        <div id="resultsMessage" class="mt-8 text-center text-lg font-medium text-gray-300">
+            <!-- Mensajes aquí -->
+        </div>
+
+        <div id="albumsGrid" class="mt-6 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+            <!-- Tarjetas de álbumes inyectadas por JS -->
+        </div>
+
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+
+        // Búsqueda del Carrusel (Home)
+        async function loadTrending() {
+            const carousel = document.getElementById('trendingCarousel');
+            carousel.innerHTML = '<div class="text-teal-400">Cargando tendencias...</div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/trending`);
+                const data = await response.json();
+                
+                carousel.innerHTML = '';
+                if (data.albumes && data.albumes.length > 0) {
+                    data.albumes.forEach(album => {
+                        const card = createSimpleCard(album);
+                        carousel.appendChild(card);
+                    });
+                } else {
+                     carousel.innerHTML = '<div class="text-gray-400">No se encontraron tendencias.</div>';
+                }
+
+            } catch (error) {
+                console.error("Error al cargar carrusel:", error);
+                carousel.innerHTML = '<div class="text-red-400">Error de red.</div>';
+            }
+        }
+        
+        // Búsqueda Principal (Explorador)
+        async function buscarDatos() {
+            const artist = document.getElementById('inputArtist').value.trim();
+            const year = document.getElementById('inputYear').value.trim();
+            const albumName = document.getElementById('inputAlbumName').value.trim();
+            const grid = document.getElementById('albumsGrid');
+            const message = document.getElementById('resultsMessage');
+
+            if (!artist) {
+                message.textContent = "El nombre del artista es obligatorio.";
+                return;
+            }
+
+            message.textContent = "Buscando...";
+            grid.innerHTML = '';
+
+            // Llama al endpoint /api/search que maneja la lógica compleja
+            let url = `${API_BASE}/api/search?artista=${encodeURIComponent(artist)}`;
+            if (year) url += `&anio=${encodeURIComponent(year)}`;
+            if (albumName) url += `&album=${encodeURIComponent(albumName)}`;
+
+            try {
+                const response = await fetch(url);
+                const result = await response.json();
+
+                if (!response.ok) {
+                    message.textContent = `Error: ${result.message || result.error}`;
+                    return;
+                }
+
+                if (result.albumes_encontrados === 0) {
+                    message.textContent = `No se encontraron álbumes para "${artist}" con esos filtros.`;
+                } else {
+                    message.innerHTML = `Éxito! Encontrados ${result.albumes_encontrados} álbumes de ${result.total_albumes} (${result.filtros.artista}).`;
+                    
+                    result.albumes.forEach(album => {
+                        grid.appendChild(createDetailedCard(album));
+                    });
+                }
+
+            } catch (error) {
+                console.error("Error en la búsqueda:", error);
+                message.textContent = "Error al conectar con la API de Flask.";
+            }
+        }
+
+        // Función auxiliar para crear la tarjeta simple (carrusel)
+        function createSimpleCard(album) {
+            const div = document.createElement('div');
+            div.className = 'flex-shrink-0 w-48 bg-gray-700 p-3 rounded-lg text-center';
+            div.innerHTML = `
+                <img src="${album.imagen}/small" alt="${album.nombre_album}" class="w-full h-auto rounded mb-2">
+                <p class="text-sm font-semibold truncate">${album.nombre_album}</p>
+                <p class="text-xs text-teal-400">${album.nombre_artista}</p>
+            `;
+            return div;
+        }
+
+        // Función auxiliar para crear la tarjeta detallada (grid)
+        function createDetailedCard(album) {
+             const div = document.createElement('div');
+             div.className = 'card-album bg-gray-700 p-4 rounded-xl shadow-lg hover:shadow-2xl';
+             div.innerHTML = `
+                 <img src="${album.imagen}/medium" alt="${album.nombre_album}" onerror="this.src='https://placehold.co/300x300/4b5563/ffffff?text=No+Cover'" class="w-full h-auto rounded-lg mb-3">
+                 <h3 class="font-bold text-lg truncate">${album.nombre_album}</h3>
+                 <p class="text-teal-300 text-sm">${album.nombre_artista} (${album.anio})</p>
+                 <p class="text-xs text-gray-400 mt-2">${album.genero || 'N/A'}</p>
+             `;
+             return div;
+        }
+
+        // Inicialización
+        window.onload = loadTrending;
+    </script>
+</body>
+</html>
